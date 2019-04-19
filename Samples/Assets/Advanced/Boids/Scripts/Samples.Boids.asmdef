@@ -5,9 +5,11 @@
         "Unity.Entities.Hybrid",
         "Unity.Collections",
         "Unity.Transforms",
+	"Unity.Transforms.Hybrid",
         "Unity.Burst",
         "Unity.Jobs",
-        "Unity.Mathematics"
+        "Unity.Mathematics",
+        "Unity.Mathematics.Extensions"
     ],
     "optionalUnityReferences": [],
     "includePlatforms": [],

@@ -6,6 +6,8 @@ using Unity.Transforms;
 
 namespace Samples.Common
 {
+    [UpdateInGroup(typeof(SimulationSystemGroup))]
+    [UpdateAfter(typeof(TransformSystemGroup))]
     public class SpawnRandomInSphereSystem : ComponentSystem
     {
         struct SpawnRandomInSphereInstance
@@ -15,11 +17,13 @@ namespace Samples.Common
             public float3 position;
         }
 
-        ComponentGroup m_MainGroup;
+        EntityQuery m_MainGroup;
 
-        protected override void OnCreateManager()
+        protected override void OnCreate()
         {
-            m_MainGroup = GetComponentGroup(typeof(SpawnRandomInSphere), typeof(Position));
+            m_MainGroup = GetEntityQuery(
+                ComponentType.ReadOnly<SpawnRandomInSphere>(),
+                ComponentType.ReadOnly<LocalToWorld>());
         }
 
         protected override void OnUpdate()
@@ -50,9 +54,9 @@ namespace Samples.Common
 
                     if (m_MainGroup.CalculateLength() == 0)
                         continue;
- 
+
                     var entities = m_MainGroup.ToEntityArray(Allocator.TempJob);
-                    var positions = m_MainGroup.ToComponentDataArray<Position>(Allocator.TempJob);
+                    var localToWorld = m_MainGroup.ToComponentDataArray<LocalToWorld>(Allocator.TempJob);
 
                     for (int entityIndex = 0; entityIndex < entities.Length; entityIndex++)
                     {
@@ -60,14 +64,14 @@ namespace Samples.Common
 
                         spawnInstance.sourceEntity = entities[entityIndex];
                         spawnInstance.spawnerIndex = sharedIndex;
-                        spawnInstance.position = positions[entityIndex].Value;
+                        spawnInstance.position = localToWorld[entityIndex].Position;
 
                         spawnInstances[spawnIndex] = spawnInstance;
                         spawnIndex++;
                     }
 
                     entities.Dispose();
-                    positions.Dispose();
+                    localToWorld.Dispose();
                 }
             }
 
@@ -79,21 +83,23 @@ namespace Samples.Common
                 var entities = new NativeArray<Entity>(count,Allocator.Temp);
                 var prefab = spawner.prefab;
                 float radius = spawner.radius;
-                var spawnPositions = new NativeArray<float3>(count, Allocator.Temp);
+                var spawnPositions = new NativeArray<float3>(count, Allocator.TempJob);
                 float3 center = spawnInstances[spawnIndex].position;
                 var sourceEntity = spawnInstances[spawnIndex].sourceEntity;
 
-                GeneratePoints.RandomPointsInSphere(center,radius,ref spawnPositions);
+                GeneratePoints.RandomPointsInUnitSphere(spawnPositions);
 
                 EntityManager.Instantiate(prefab, entities);
 
                 for (int i = 0; i < count; i++)
                 {
-                    var position = new Position
+                    EntityManager.SetComponentData(entities[i], new LocalToWorld
                     {
-                        Value = spawnPositions[i]
-                    };
-                    EntityManager.SetComponentData(entities[i],position);
+                        Value = float4x4.TRS(
+                            center + (spawnPositions[i] * radius),
+                            quaternion.LookRotationSafe(spawnPositions[i], math.up()),
+                            new float3(1.0f, 1.0f, 1.0f))
+                    });
                 }
 
                 EntityManager.RemoveComponent<SpawnRandomInSphere>(sourceEntity);
